@@ -34,6 +34,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - id: filter
         name: 挙動に関わるファイルが変わっているか確認
@@ -50,7 +51,7 @@ jobs:
           CHANGED=$(git diff --name-only "$BASE_SHA" HEAD)
 
           # 静的サイトの JS・演出・e2e 関連
-          if printf '%s\n' "$CHANGED" | grep -qE '^(site/assets/js/|site/index\.html$|tests/e2e/|playwright\.config\.mjs$|site/assets/vendor/)'; then
+          if printf '%s\n' "$CHANGED" | grep -qE '^(site/assets/js/|site/assets/css/|site/index\.html$|tests/e2e/|playwright\.config\.mjs$|site/assets/vendor/)'; then
             echo "behavior=true" >> "$GITHUB_OUTPUT"
           else
             echo "behavior=false" >> "$GITHUB_OUTPUT"
@@ -68,6 +69,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -125,6 +128,8 @@ jobs:
 
       - uses: actions/checkout@v4
         if: needs.changes.outputs.behavior == 'true'
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
         if: needs.changes.outputs.behavior == 'true'
@@ -181,6 +186,8 @@ jobs:
 
       - uses: actions/checkout@v4
         if: needs.changes.outputs.web == 'true'
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
         if: needs.changes.outputs.web == 'true'
@@ -249,25 +256,28 @@ jobs:
     # 集約ゲート＝branch protection が要求する「安定した1つの必須チェック」。
     # 内部 job の名前や中身が変わっても context 名は 'ci-green' で不変。
     #
-    # 待つのは quality（数秒〜数十秒で終わる機械検証）と、走った場合の web。
-    # web は apps/ packages/ に触れなければ skipped になり、その場合は緑として扱う
-    # ＝静的サイトの一文修正で Next.js のビルドを待たされない。触れた場合は必ず通す。
+    # 待つのは changes（変更範囲の判定）・quality（数秒〜数十秒の機械検証）・web の3つ。
+    # web は job ごと skip せず必ず走り、対象外のときは重い step だけ飛ばして success で終わる
+    # ＝静的サイトの一文修正で Next.js のビルドを待たされない。
+    # changes を needs に入れるのは、判定そのものが落ちたときに web が skipped になり、
+    # それを緑と読んで ci-green が通ってしまう抜け穴を塞ぐため。
     # browser(e2e/a11y) は参考扱いで、ここでは待たない。
-    needs: [quality, web]
+    needs: [changes, quality, web]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: 上流ジョブを検査（skipped は「対象外」として緑扱い、failure/cancelled は赤）
+      - name: 上流ジョブが全て success か検査（success 以外は全て赤）
         env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
           QUALITY_RESULT: ${{ needs.quality.result }}
           WEB_RESULT: ${{ needs.web.result }}
         run: |
-          if [ "$QUALITY_RESULT" != "success" ]; then
-            echo "ci-green: FAIL (quality=$QUALITY_RESULT)"
-            exit 1
-          fi
-          if [ "$WEB_RESULT" != "success" ] && [ "$WEB_RESULT" != "skipped" ]; then
-            echo "ci-green: FAIL (web=$WEB_RESULT)"
-            exit 1
-          fi
-          echo "ci-green: OK (quality=$QUALITY_RESULT web=$WEB_RESULT)"
+          # skipped も緑扱いしない。3つとも job-level の if: を持たないので、
+          # success 以外になるのは「本当に落ちた/中断された」ときだけ。
+          for pair in "changes=$CHANGES_RESULT" "quality=$QUALITY_RESULT" "web=$WEB_RESULT"; do
+            if [ "${pair#*=}" != "success" ]; then
+              echo "ci-green: FAIL (${pair})"
+              exit 1
+            fi
+          done
+          echo "ci-green: OK (changes=$CHANGES_RESULT quality=$QUALITY_RESULT web=$WEB_RESULT)"

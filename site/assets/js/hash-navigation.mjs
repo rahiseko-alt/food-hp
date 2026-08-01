@@ -14,7 +14,15 @@ export class HashNavigation {
     if (this.frame) window.cancelAnimationFrame(this.frame);
     this.frame = window.requestAnimationFrame(() => {
       this.frame = 0;
-      const id = decodeURIComponent(window.location.hash.slice(1));
+      const raw = window.location.hash.slice(1);
+      // "#%" や "#%zz" のような不正なパーセントエンコードだと decodeURIComponent が URIError を投げる。
+      // ここは requestAnimationFrame のコールバック内なので、投げると誰も拾えずスクロール同期が止まる。
+      let id = raw;
+      try {
+        id = decodeURIComponent(raw);
+      } catch {
+        // デコードできないものは、生の文字列をそのままIDとして扱う
+      }
       const target = id ? document.getElementById(id) : null;
       if (!target) return;
       document.documentElement.classList.add('is-hash-syncing');

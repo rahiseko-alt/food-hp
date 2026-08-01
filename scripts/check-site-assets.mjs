@@ -61,7 +61,7 @@ function main() {
 
   const refs = [];
   for (const file of files) {
-    if (/\.(html|css|js)$/.test(file)) {
+    if (/\.(html|css|js|mjs)$/.test(file)) {
       const text = readFileSync(join(SITE, file), "utf8");
       if (file.endsWith(".html")) {
         refs.push(

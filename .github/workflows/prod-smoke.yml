@@ -41,7 +41,7 @@ jobs:
       - name: 公開アセットが 200 で配信されている — G-2-3
         run: |
           fail=0
-          for p in assets/css/site.css assets/js/main.mjs assets/lottie/hero.json assets/lottie/hero-sp.json assets/art/paper.png; do
+          for p in assets/css/site.css assets/js/main.mjs assets/lottie/hero.json assets/lottie/hero-sp.json assets/art/paper.png assets/art/greeting-ink.png; do
             code=$(curl -sS -L -o /dev/null -w '%{http_code}' --max-time 30 "${PROD_URL}/${p}")
             echo "${code} ${p}"
             [ "${code}" = "200" ] || fail=1
@@ -56,8 +56,14 @@ jobs:
           # 本番が実際に配っている index.html から現在の ?v= 付き参照を取り出し、
           # そのURLがちゃんと 200 を返すこと（＝新しいURLとして生きていること）を確かめる。
           curl -sS -L --max-time 30 "${PROD_URL}" -o body.html
+          refs=$(grep -oE '(href|src)="assets/(css|js)/[^"]+"' body.html | sed -E 's/.*"(.*)"/\1/')
+          # 参照が1件も取れないまま「全部200」と報告するのを防ぐ（空振り合格の封じ込め）。
+          if [ -z "${refs}" ]; then
+            echo "FAIL: 本番の index.html から assets/(css|js) の参照が1件も取れなかった"
+            exit 1
+          fi
           fail=0
-          for p in $(grep -oE '(href|src)="assets/(css|js)/[^"]+"' body.html | sed -E 's/.*"(.*)"/\1/'); do
+          for p in ${refs}; do
             if [ "${p#*\?v=}" = "${p}" ]; then
               echo "FAIL: ${p} に ?v= が付いていません（キャッシュバスティング未適用）"
               fail=1
@@ -81,18 +87,51 @@ jobs:
         run: |
           # apex / www は Vercel の既存サイト、MX は Google Workspace。
           # サブドメイン追加でこれらを壊していないことを DNS の実測で確かめる。
+          # dig の引数は [name] [type] [class] の順。`dig name A CNAME` は CNAME が class として
+          # 解釈されて必ず失敗するため、種別ごとに分けて引く。
+          # 期待値は docs/site/DEPLOY.md の DNS 実測表が正。Vercel 側が IP を変えたら両方を更新する。
+          VERCEL_IP="76.76.21.21"
           echo "--- apex / www ---"
           apex=$(dig +short kouheikosehira.com A | tr '\n' ' ')
-          www=$(dig +short www.kouheikosehira.com A CNAME | tr '\n' ' ')
+          www_a=$(dig +short www.kouheikosehira.com A | tr '\n' ' ')
+          www_cname=$(dig +short www.kouheikosehira.com CNAME | tr '\n' ' ')
           echo "apex=${apex}"
-          echo "www=${www}"
-          if [ -z "${apex}" ]; then echo "FAIL: apex の A レコードが消えている"; exit 1; fi
+          echo "www(A)=${www_a}"
+          echo "www(CNAME)=${www_cname}"
+          # 「空でないこと」だけでは、別のIPに向いていても通ってしまう。期待値と突き合わせる。
+          if ! printf '%s' "${apex}" | grep -qw "${VERCEL_IP}"; then
+            echo "FAIL: apex の A が期待値 ${VERCEL_IP} ではない（既存サイトが差し替わっている疑い）"
+            exit 1
+          fi
+          if [ -z "${www_a}${www_cname}" ]; then
+            echo "FAIL: www の A も CNAME も引けない（既存サイトの www が消えている）"
+            exit 1
+          fi
+          if [ -n "${www_a}" ] && ! printf '%s' "${www_a}" | grep -qw "${VERCEL_IP}"; then
+            echo "FAIL: www の A が期待値 ${VERCEL_IP} ではない"
+            exit 1
+          fi
 
           echo "--- MX (Google Workspace) ---"
-          mx=$(dig +short kouheikosehira.com MX | tr '\n' ' ')
-          echo "mx=${mx}"
-          if ! printf '%s' "${mx}" | grep -q 'google.com'; then
-            echo "FAIL: MX に Google Workspace が見当たらない（メールが止まる）"
+          # 部分一致（grep 'google.com'）だと evilgoogle.com のようなホストも通ってしまうため、
+          # ホスト名を取り出して Google Workspace の正規ホストと完全一致で突き合わせる。
+          mx_hosts=$(dig +short kouheikosehira.com MX | awk '{print tolower($2)}')
+          echo "mx_hosts=${mx_hosts}"
+          if [ -z "${mx_hosts}" ]; then
+            echo "FAIL: MX レコードが1件も無い（メールが止まる）"
+            exit 1
+          fi
+          ok=0
+          for h in ${mx_hosts}; do
+            case "${h}" in
+              aspmx.l.google.com.|alt1.aspmx.l.google.com.|alt2.aspmx.l.google.com.|alt3.aspmx.l.google.com.|alt4.aspmx.l.google.com.)
+                ok=1 ;;
+              *)
+                echo "WARN: 想定外の MX ホスト ${h}" ;;
+            esac
+          done
+          if [ "${ok}" != "1" ]; then
+            echo "FAIL: MX に Google Workspace の正規ホストが見当たらない（メールが止まる）"
             exit 1
           fi
           echo "DNS OK: 既存サイトの A と Google Workspace の MX は無傷"
