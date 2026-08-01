@@ -40,7 +40,7 @@
     "globals": "^17.8.0",
     "html-validate": "^11.6.0",
     "stylelint": "^17.14.1",
-    "typescript": "^5.7.3"
+    "typescript": "^7.0.2"
   },
   "pnpm": {
     "overrides": {
