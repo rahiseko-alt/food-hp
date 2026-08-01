@@ -98,18 +98,32 @@ jobs:
           echo "apex=${apex}"
           echo "www(A)=${www_a}"
           echo "www(CNAME)=${www_cname}"
-          # 「空でないこと」だけでは、別のIPに向いていても通ってしまう。期待値と突き合わせる。
-          if ! printf '%s' "${apex}" | grep -qw "${VERCEL_IP}"; then
-            echo "FAIL: apex の A が期待値 ${VERCEL_IP} ではない（既存サイトが差し替わっている疑い）"
-            exit 1
-          fi
+          # 「期待値がひとつでも含まれていれば合格」にしない。想定外のレコードが1件でも混ざれば落とす。
+          # 76.76.21.21 と攻撃者のIPが並んで返る状態でも、片方一致だけ見ていると素通りしてしまうため。
+          assert_all_a_are_vercel() {
+            label="$1"; records="$2"
+            if [ -z "${records}" ]; then
+              echo "FAIL: ${label} の A レコードが1件も無い"
+              exit 1
+            fi
+            for ip in ${records}; do
+              if [ "${ip}" != "${VERCEL_IP}" ]; then
+                echo "FAIL: ${label} に想定外の A レコード ${ip}（期待は ${VERCEL_IP} のみ）"
+                exit 1
+              fi
+            done
+            echo "OK: ${label} の A は ${VERCEL_IP} のみ"
+          }
+
+          assert_all_a_are_vercel "apex" "${apex}"
+
           if [ -z "${www_a}${www_cname}" ]; then
             echo "FAIL: www の A も CNAME も引けない（既存サイトの www が消えている）"
             exit 1
           fi
-          if [ -n "${www_a}" ] && ! printf '%s' "${www_a}" | grep -qw "${VERCEL_IP}"; then
-            echo "FAIL: www の A が期待値 ${VERCEL_IP} ではない"
-            exit 1
+          # www は A で直に返る構成でも CNAME 経由でも良いが、A が返るなら全件が期待値であること。
+          if [ -n "${www_a}" ]; then
+            assert_all_a_are_vercel "www" "${www_a}"
           fi
 
           echo "--- MX (Google Workspace) ---"
@@ -121,17 +135,15 @@ jobs:
             echo "FAIL: MX レコードが1件も無い（メールが止まる）"
             exit 1
           fi
-          ok=0
+          # 想定外のホストは警告で済ませず落とす。メールの宛先が1件でも横取りされていれば事故なので、
+          # 「正規のものが混ざっていればよい」では検査にならない。
           for h in ${mx_hosts}; do
             case "${h}" in
               aspmx.l.google.com.|alt1.aspmx.l.google.com.|alt2.aspmx.l.google.com.|alt3.aspmx.l.google.com.|alt4.aspmx.l.google.com.)
-                ok=1 ;;
+                ;;
               *)
-                echo "WARN: 想定外の MX ホスト ${h}" ;;
+                echo "FAIL: 想定外の MX ホスト ${h}（メールが横取りされている疑い）"
+                exit 1 ;;
             esac
           done
-          if [ "${ok}" != "1" ]; then
-            echo "FAIL: MX に Google Workspace の正規ホストが見当たらない（メールが止まる）"
-            exit 1
-          fi
           echo "DNS OK: 既存サイトの A と Google Workspace の MX は無傷"
