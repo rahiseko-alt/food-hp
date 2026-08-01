@@ -1,15 +1,163 @@
 name: CI
 
-# 機械の審判（machine judge）。型/Lint/テスト/ビルド/起動確認を機械的に検査する
-# （AI の自己申告を証拠にしない。完了報告の evidence はこのワークフローの run URL / commit SHA を指す）。
+# 機械の審判（machine judge）。AI の自己申告を証拠にしない。
+# 完了報告の evidence はこのワークフローの run URL / commit SHA を指す。
+#
+# このリポジトリには2つの成果物が同居している：
+#   - 静的サイト site/（ビルド無し。Cloudflare Pages がそのまま配信する本番の製品）
+#   - Next.js モノレポ雛形 apps/ packages/（まだ製品ではない雛形）
+# CI は両方を見るが、待ち時間の性質が違うので走らせ方を分けている。
+#
+# push は main だけをトリガーにする（feature branch への push は pull_request イベントで
+# 既に CI が走るため、両方を対象にすると同一コミットに対して CI が2回丸ごと走り、
+# 待ち時間が単純に倍になる）。
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  changes:
+    name: detect change scope
+    runs-on: ubuntu-latest
+    outputs:
+      behavior: ${{ steps.filter.outputs.behavior }}
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: filter
+        name: 挙動に関わるファイルが変わっているか確認
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # 差分の基準が取れない場合（新規ブランチ・force-push直後等）は安全側に倒して両方 true にする。
+          if [ -z "$BASE_SHA" ] || ! git cat-file -e "$BASE_SHA" 2>/dev/null; then
+            echo "behavior=true" >> "$GITHUB_OUTPUT"
+            echo "web=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          CHANGED=$(git diff --name-only "$BASE_SHA" HEAD)
+
+          # 静的サイトの JS・演出・e2e 関連
+          if printf '%s\n' "$CHANGED" | grep -qE '^(site/assets/js/|site/index\.html$|tests/e2e/|playwright\.config\.mjs$|site/assets/vendor/)'; then
+            echo "behavior=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "behavior=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Next.js 雛形（typecheck/build/起動スモークは分単位かかるので、触ったときだけ走らせる）
+          if printf '%s\n' "$CHANGED" | grep -qE '^(apps/|packages/|presets/|pnpm-workspace\.yaml$|tsconfig\.base\.json$)'; then
+            echo "web=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "web=false" >> "$GITHUB_OUTPUT"
+          fi
+
   quality:
-    name: typecheck / lint / test / build
+    name: references / lint / unit / audit / roadmap
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Check internal references
+        run: pnpm run verify:references
+
+      - name: Check Lottie contract
+        run: pnpm run verify:lottie
+
+      - name: Check asset version consistency
+        run: pnpm run verify:asset-version
+
+      - name: Check i18n parity
+        run: pnpm run verify:i18n
+
+      - name: Lint HTML, CSS, and JavaScript
+        run: pnpm run lint
+
+      - name: Run Node unit tests
+        run: pnpm run test:unit
+
+      - name: Audit dependencies
+        run: pnpm run audit
+
+      - name: Verify roadmap evidence
+        run: pnpm run verify:roadmap
+
+  browser:
+    name: Playwright / axe
+    needs: changes
+    # 文言・スタイルだけの変更では JS/演出は壊れようがないため、対象ファイルが変わったときだけ走らせる
+    # （e2e 約5分・a11y 約1.5分は CI の待ち時間の大半を占めるため、必須からは外してある）。
+    # ci-green はこの job の結果を待たない＝マージの必須条件ではない。
+    if: needs.changes.outputs.behavior == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: pnpm run test:e2e
+
+      - name: Run accessibility tests
+        run: pnpm run test:a11y
+
+      - name: Upload browser artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  web:
+    name: typecheck / build / 起動スモーク (Next.js)
+    needs: changes
+    # apps/ packages/ に触れたときだけ走らせる。静的サイトだけの変更では起動しない
+    # （＝一文・一単語の変更を速く回すため）。触れたときは ci-green の必須条件になる。
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,47 +177,21 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: pnpm -r typecheck
+        run: pnpm run web:typecheck
 
       - name: Lint
-        run: pnpm -r lint
+        run: pnpm run web:lint
 
       - name: Test
-        run: pnpm -r test
+        run: pnpm run web:test
 
       - name: Build
-        run: pnpm -r build
-
-      - name: Audit (fail on moderate+)
-        run: pnpm audit --audit-level moderate
-
-  smoke:
-    name: 起動スモーク (build → start → curl 200 + marker)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.0
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-
-      - name: Install (frozen lockfile)
-        run: pnpm install --frozen-lockfile
-
-      - name: Build
-        run: pnpm -r build
+        run: pnpm run web:build
 
       # 到達性を外部事実(HTTP 200＋本文マーカー)で縛る。スクショにしない。
       - name: Smoke (next start → curl 200 + 'cc-v2 monorepo')
         run: |
-          pnpm --filter web start &
+          pnpm run web:start &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
 
@@ -94,19 +216,30 @@ jobs:
 
           echo "SMOKE OK: HTTP 200 かつ本文に 'cc-v2 monorepo' を確認"
 
-  # 集約ゲート＝branch protection が要求する「安定した1つの必須チェック」。
-  # 内部ジョブ(quality/smoke)の名前や中身が変わっても context 名は 'ci-green' で不変。
-  # scripts/setup.sh はこの 'ci-green' だけを必須指定する。
   gate:
     name: ci-green
-    needs: [quality, smoke]
+    # 集約ゲート＝branch protection が要求する「安定した1つの必須チェック」。
+    # 内部 job の名前や中身が変わっても context 名は 'ci-green' で不変。
+    #
+    # 待つのは quality（数秒〜数十秒で終わる機械検証）と、走った場合の web。
+    # web は apps/ packages/ に触れなければ skipped になり、その場合は緑として扱う
+    # ＝静的サイトの一文修正で Next.js のビルドを待たされない。触れた場合は必ず通す。
+    # browser(e2e/a11y) は参考扱いで、ここでは待たない。
+    needs: [quality, web]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: 上流ジョブが全て success か検査（1つでも失敗/スキップなら赤）
+      - name: 上流ジョブを検査（skipped は「対象外」として緑扱い、failure/cancelled は赤）
+        env:
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          WEB_RESULT: ${{ needs.web.result }}
         run: |
-          if [ "${{ needs.quality.result }}" != "success" ] || [ "${{ needs.smoke.result }}" != "success" ]; then
-            echo "ci-green: FAIL (quality=${{ needs.quality.result }} smoke=${{ needs.smoke.result }})"
+          if [ "$QUALITY_RESULT" != "success" ]; then
+            echo "ci-green: FAIL (quality=$QUALITY_RESULT)"
             exit 1
           fi
-          echo "ci-green: OK（quality / smoke ともに success）"
+          if [ "$WEB_RESULT" != "success" ] && [ "$WEB_RESULT" != "skipped" ]; then
+            echo "ci-green: FAIL (web=$WEB_RESULT)"
+            exit 1
+          fi
+          echo "ci-green: OK (quality=$QUALITY_RESULT web=$WEB_RESULT)"

@@ -12,6 +12,10 @@ dist/
 # next typegen
 next-env.d.ts
 
+# test output（Playwright）
+playwright-report/
+test-results/
+
 # production / cache
 .turbo/
 .vercel/
