@@ -1,4 +1,4 @@
-import { OPENING_STATES } from './config.mjs?v=2026-08-01b';
+import { OPENING_STATES } from './config.mjs?v=2026-08-01c';
 
 const waitForFonts = (timeoutMs) => {
   if (!document.fonts?.ready) return Promise.resolve();
@@ -342,7 +342,9 @@ export class OpeningController {
   }
 
   fail() {
-    if (this.state === 'destroyed') return;
+    // ready 到達後でも onResize のリマウント失敗で呼ばれうる。そこで failed に落とすと
+    // data-opening-state が ready から failed へ戻り、CSS と e2e の前提が壊れる。
+    if (['ready', 'failed', 'destroyed'].includes(this.state)) return;
     this.timeline?.kill();
     this.timeline = null;
     this.clearTimers();
