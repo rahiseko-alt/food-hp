@@ -110,39 +110,53 @@ jobs:
   browser:
     name: Playwright / axe
     needs: changes
-    # 文言・スタイルだけの変更では JS/演出は壊れようがないため、対象ファイルが変わったときだけ走らせる
-    # （e2e 約5分・a11y 約1.5分は CI の待ち時間の大半を占めるため、必須からは外してある）。
-    # ci-green はこの job の結果を待たない＝マージの必須条件ではない。
-    if: needs.changes.outputs.behavior == 'true'
     runs-on: ubuntu-latest
+    # 文言・スタイルだけの変更では JS/演出は壊れようがないため、対象ファイルが変わったときだけ
+    # 実際のテストを走らせる（e2e 約5分・a11y 約1.5分は CI の待ち時間の大半を占める）。
+    #
+    # ただし job-level の `if:` は使わない。auto-merge.yml が「conclusion が success/neutral 以外は
+    # 未成功」と判定する設計（＝必須チェックを skip させて素通りさせる裏口を塞ぐため、skipped を
+    # 緑扱いしない）なので、job ごと skip すると自動マージが永久に発火しなくなる。
+    # 代わりに job は必ず走らせ、重い step だけを条件付きにして success で終わらせる。
     steps:
+      - name: 対象外のときは理由を残して何もしない
+        if: needs.changes.outputs.behavior != 'true'
+        run: echo "JS・演出・e2e 関連の変更が無いため、ブラウザテストは実行しない（対象外）"
+
       - uses: actions/checkout@v4
+        if: needs.changes.outputs.behavior == 'true'
 
       - name: Setup pnpm
+        if: needs.changes.outputs.behavior == 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 10.33.0
 
       - name: Setup Node
+        if: needs.changes.outputs.behavior == 'true'
         uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
           cache: pnpm
 
       - name: Install
+        if: needs.changes.outputs.behavior == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Install Chromium
+        if: needs.changes.outputs.behavior == 'true'
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run browser tests
+        if: needs.changes.outputs.behavior == 'true'
         run: pnpm run test:e2e
 
       - name: Run accessibility tests
+        if: needs.changes.outputs.behavior == 'true'
         run: pnpm run test:a11y
 
       - name: Upload browser artifacts
-        if: failure()
+        if: failure() && needs.changes.outputs.behavior == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
@@ -155,41 +169,55 @@ jobs:
   web:
     name: typecheck / build / 起動スモーク (Next.js)
     needs: changes
-    # apps/ packages/ に触れたときだけ走らせる。静的サイトだけの変更では起動しない
-    # （＝一文・一単語の変更を速く回すため）。触れたときは ci-green の必須条件になる。
-    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
+    # apps/ packages/ に触れたときだけ実際に検査する。静的サイトだけの変更では走らせない
+    # （＝一文・一単語の変更を速く回すため）。
+    # browser ジョブと同じ理由で job-level の `if:` は使わない（auto-merge が skipped を
+    # 緑扱いしないため、job ごと skip すると自動マージが永久に発火しない）。
     steps:
+      - name: 対象外のときは理由を残して何もしない
+        if: needs.changes.outputs.web != 'true'
+        run: echo "apps/ packages/ presets/ に変更が無いため、Next.js の検査は実行しない（対象外）"
+
       - uses: actions/checkout@v4
+        if: needs.changes.outputs.web == 'true'
 
       - name: Setup pnpm
+        if: needs.changes.outputs.web == 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 10.33.0
 
       - name: Setup Node
+        if: needs.changes.outputs.web == 'true'
         uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
           cache: pnpm
 
       - name: Install (frozen lockfile)
+        if: needs.changes.outputs.web == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Typecheck
+        if: needs.changes.outputs.web == 'true'
         run: pnpm run web:typecheck
 
       - name: Lint
+        if: needs.changes.outputs.web == 'true'
         run: pnpm run web:lint
 
       - name: Test
+        if: needs.changes.outputs.web == 'true'
         run: pnpm run web:test
 
       - name: Build
+        if: needs.changes.outputs.web == 'true'
         run: pnpm run web:build
 
       # 到達性を外部事実(HTTP 200＋本文マーカー)で縛る。スクショにしない。
       - name: Smoke (next start → curl 200 + 'cc-v2 monorepo')
+        if: needs.changes.outputs.web == 'true'
         run: |
           pnpm run web:start &
           SERVER_PID=$!
