@@ -2,6 +2,15 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
+<script>
+  /* オープニング演出のFOUC対策。main.mjsはtype="module"で読み込み後まで遅延実行されるため、
+     JS実行前に一瞬だけ[data-opening-state]無し（＝CSSの非表示ルールが効かない、最終状態の見た目）
+     で初回描画されてしまう。opening-controller.mjsのshouldBypass()と同じ判定を、初回描画より前に
+     同期的に反映することでその一瞬の乱れを消す（実際の制御は変わらず、controllerが後から追随する） */
+  document.documentElement.dataset.openingState =
+    (window.location.hash || window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+      ? 'ready' : 'loading';
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Kose Food AI｜飲食20年×AIの顧問</title>
 <meta name="description" content="人を増やす前に、人がやらなくていい仕事を減らす。シフト・発注・電話・口コミといった毎日必ず発生する事務をAIに渡し、現場に入って優先順位を決め、設定まで済ませ、翌月から数字で確かめます。" />

@@ -9,6 +9,11 @@
 //   - CI run               : actions/runs/<数字>  もしくは https://.../actions/runs/<数字>
 //   - 任意の URL           : http(s)://...（公開URL・run URL・alert URL 等）
 //   - デプロイID           : dpl_<英数字>（Vercel）
+//   - マスター本人による直接確認 : attested-by-master:YYYY-MM-DD:<確認した具体的な事実>
+//     （例：マスター本人しか見られない受信箱の中身など、AIにも独立検証者にも
+//      アクセスできず、SHA/URL/run-idの形で外部に残らない事実専用。実装者本人や
+//      AIの自己申告には使えない＝あくまで案件の当事者であるマスター自身が
+//      「自分の目で見た」と直接述べた場合のみ）
 // スクショ・「レビューした」等の自己申告は不許可（＝これらは非空でも弾く）。
 //
 // あわせて原子性（AGENTS.md「検証の規律」＝1葉=1事実=1verify）を機械強制する:
@@ -32,6 +37,7 @@ const EVIDENCE_PATTERNS = [
   /^actions\/runs\/\d+$/, // CI run（短縮表記）
   /^https?:\/\/\S+$/, // 任意の外部URL（run/alert/公開URL）
   /^dpl_[A-Za-z0-9]+$/, // Vercel デプロイID
+  /^attested-by-master:\d{4}-\d{2}-\d{2}:\S.+$/, // マスター本人による直接確認（SHA/URLが原理的に存在しない私的な事実専用）
 ];
 
 function extractRoadmapJson(html) {
