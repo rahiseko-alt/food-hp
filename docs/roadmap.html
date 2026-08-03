@@ -281,8 +281,8 @@
               "detail":"FormSubmit は初回送信で確認メールが来て、そのリンクを押すまで内容がメールにならない。押し忘れると『問い合わせが来ない』ではなく『来ているのに見えていない』事故になる",
               "criteria":[
                 { "text":"本番フォームからのテスト送信が info@kouheikosehira.com に本文つきで届く",
-                  "verify":"本番の /#contact から実際に送信し、確認リンクを押した後にもう一度送って受信を確認する。証拠は FormSubmit の送信完了ページURL（または管理画面の該当URL）",
-                  "evidence":"" }
+                  "verify":"本番の /#contact から実際に送信し、確認リンクを押した後にもう一度送って受信を確認する。FormSubmitはAJAX送信のため完了ページURLが発行されず、受信箱もマスター本人しか見られないため、証拠は FormSubmit の送信完了ページURL（または管理画面の該当URL）、それが無い場合は attested-by-master:YYYY-MM-DD:<確認内容> の形でマスター本人の直接確認を記録する",
+                  "evidence":"attested-by-master:2026-08-03:本番の/#contactから複数回テスト送信し、毎回同様にinfo@kouheikosehira.com宛のFormSubmit通知メールが本文つきで届くことを直接確認した（初回有効化は既に完了している）" }
               ] },
             { "id":"G-3-2", "kind":"state",
               "theme":"送った4項目が、欠けずにそのまま届く",
@@ -290,8 +290,8 @@
               "detail":"store（店名/会社名）・name（お名前）・contact（連絡先）・detail（困っていること）",
               "criteria":[
                 { "text":"受信メールに store / name / contact / detail の4項目が入力どおり含まれる",
-                  "verify":"4項目に判別できるダミー値を入れて送信し、受信本文と突き合わせる。証拠はその送信の完了ページURL",
-                  "evidence":"" }
+                  "verify":"4項目に判別できるダミー値を入れて送信し、受信本文と突き合わせる。証拠はその送信の完了ページURL、それが無い場合は attested-by-master:YYYY-MM-DD:<確認内容> の形でマスター本人の直接確認を記録する",
+                  "evidence":"attested-by-master:2026-08-03:本番の/#contactにダミー値(store=77/name=88/contact=rahiseko@gmail.com/detail=49849)を送信し、2026-08-03 12:32 UTC受信のメール本文に4項目とも入力どおり記載されていることを直接確認した" }
               ] },
             { "id":"G-3-3", "kind":"state",
               "theme":"メールアドレスが、そのままページに書かれていない",
