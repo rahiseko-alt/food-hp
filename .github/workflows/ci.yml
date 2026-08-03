@@ -73,7 +73,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.33.0
 
@@ -133,7 +133,7 @@ jobs:
 
       - name: Setup pnpm
         if: needs.changes.outputs.behavior == 'true'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.33.0
 
@@ -191,7 +191,7 @@ jobs:
 
       - name: Setup pnpm
         if: needs.changes.outputs.web == 'true'
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.33.0
 
