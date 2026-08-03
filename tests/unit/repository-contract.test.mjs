@@ -80,9 +80,10 @@ test("deployment documentation separates the repository and Pages names", () => 
   // 人の手作業。手順そのものを手順書から消さないこと（「確認する」に後退させない）。
   assert.match(deploy, /Disconnect/);
   assert.match(deploy, /Connect/);
-  // ラベルの存在だけでなく、同じ行の値が site であることを見る。`/`（リポジトリ直下）に
-  // 書き換えられると AGENTS.md や docs/ まで公開されてしまうため、値そのものを固定する。
-  assert.match(deploy, /\|\s*Build output directory\s*\|[^\n]*\bsite\b/);
+  // ラベルの存在だけでなく、同じセルの値が正確に site であることを見る。単語境界(\b)だけでは
+  // /site や site-old のような値も通してしまうため、Markdown のコードスパン `site` を直接固定する。
+  // `/`（リポジトリ直下）に書き換えられると AGENTS.md や docs/ まで公開されてしまう。
+  assert.match(deploy, /\|\s*Build output directory\s*\|\s*\*\*`site`\*\*(?=\s*(?:\||←))/);
 
   // 切り替わったことを目視ではなく外部事実（配信中の ?v= の値）で確認する手順を残すこと。
   assert.match(deploy, /site\.css\?v=/);
