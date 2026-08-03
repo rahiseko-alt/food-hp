@@ -35,19 +35,42 @@ git push -u origin <作業ブランチ>
 
 ---
 
-## 2. Cloudflare Pages の接続を確認する
+## 2. Cloudflare Pages の Git 接続を張り替える
 
-1. <https://dash.cloudflare.com/> にログイン（`kouheikosehira.com` があるアカウント）
-2. **Workers & Pages → `ai-food-company`** を開く
-3. Git接続先が `rahiseko-alt/food-hp` であることを確認する
+**2026-08-01 の引っ越し（kose-food-ai-hp → food-hp）で実際に行った手順。** この張り替えは
+Cloudflare ダッシュボード上の人の手作業で、AI 側からは実行できない（API トークンが無い）。
+以下は「確認する」ではなく「張り替える」実施済みの手順そのもの。
 
-   > **引っ越し直後の必須作業。** Pages プロジェクト `ai-food-company` は、引っ越し前の
-   > `rahiseko-alt/kose-food-ai-hp` に接続されたままである。**接続先を `rahiseko-alt/food-hp` へ
-   > 張り替えるまで、新リポジトリへ push しても本番は更新されない。** この張り替えは
-   > Cloudflare ダッシュボード上の人の手作業で、AI 側からは実行できない（API トークンが無い）。
-   > 張り替えるとカスタムドメイン `food.kouheikosehira.com` もそのまま引き継がれる。
+### 2-1. プロジェクトを開く（検索・左ナビが効かないことがある）
 
-4. ビルド設定を次の値にする（ビルド不要の静的サイト）
+新ダッシュボードでは、左ナビの検索や「Workers & Pages」一覧に `ai-food-company` が
+**出てこないことがある**（2026-08-01 に実際に発生。同一アカウントなのに一覧・検索の両方に
+出なかった）。その場合は URL を直接開く。
+
+```
+https://dash.cloudflare.com/<アカウントID>/pages/view/ai-food-company
+```
+
+アカウントID は過去の CI ログ（`prod-smoke.yml` の run URL 等）や、ダッシュボードの
+どのページでもよいので一度開いたときの URL から拾える（`dash.cloudflare.com/<32桁の16進数>/...`）。
+
+> **接続済みリポジトリの表示名が古いことがある。** プロジェクト画面右上や
+> Settings の「Git repository」欄に、実際とは違うリポジトリ名（例：`ai-food-company` という
+> 名前自体）が表示されることがある。GitHub 側でリポジトリを改名した場合に Cloudflare 側の
+> 表示が追従していないだけで、**実体は正しいプロジェクトである**ことが多い。
+> 迷ったら Deployments タブでデプロイ元のコミット SHA を見て、GitHub の実際のコミット
+> （マージした PR のマージコミット SHA）と一致するかで実体を確認する。
+
+### 2-2. 接続を切って、繋ぎ直す
+
+1. プロジェクトを開いたら **Settings → Build** タブに入る
+2. **Git repository** 欄の **Disconnect** を押す
+   （確認ダイアログが出るが「今後 push しても自動デプロイされなくなる」という意味だけで、
+   **既存の公開内容は消えない**。安全に押してよい）
+3. 同じ欄に出る **Connect** を押す
+4. **Git account** → 対象の GitHub アカウント、**Repository** → **`food-hp`** を選ぶ
+5. **Production branch** は `main` のまま
+6. **Build configuration** に次の値を入れる（ビルド不要の静的サイト）
 
    | 項目 | 値 |
    |---|---|
@@ -55,12 +78,25 @@ git push -u origin <作業ブランチ>
    | Build command | （空欄） |
    | Build output directory | **`site`** ← ここだけ空欄ではなく指定する |
    | Root directory | （空欄） |
-   | Production branch | `main` |
 
    ⚠ **Build output directory を `site` にすること**。`/`（リポジトリ直下）にすると
    リポジトリ内の運用ファイル（`AGENTS.md` や `docs/`）まで配信されてしまう。
 
-5. **Save and Deploy** 後、PagesのURLで実機表示を一度確認する
+7. **Connect** を押すと自動で1回ビルド・デプロイが走る
+
+### 2-3. 切り替わったことを外部事実で確認する
+
+カスタムドメイン `food.kouheikosehira.com` は接続先の張り替えだけでは引き継がれない
+デプロイ内容が反映されて初めて新リポジトリの中身になる。自己申告（見た目の確認）ではなく、
+外部から機械的に判定できる目印を使う：
+
+```sh
+curl -s https://food.kouheikosehira.com/ | grep -o 'site.css?v=[^"]*'
+```
+
+デプロイ済みリポジトリの `site/index.html` の `?v=` と一致すれば切り替え完了。
+2026-08-01 の実施では旧リポジトリの `2026-08-01b` から新リポジトリの `2026-08-01c` への
+切り替わりを、この方法で確認した。
 
 ---
 

@@ -76,7 +76,12 @@ test("deployment documentation separates the repository and Pages names", () => 
   assert.match(deploy, /Cloudflare Pages.+`ai-food-company`/s);
   assert.doesNotMatch(deploy, /rahiseko-alt\/ai-food-company/);
 
-  // 引っ越し直後、Pages の接続先が旧リポジトリのままだと push しても本番が更新されない。
-  // 人の手作業が要る事実を手順書から消さないこと。
-  assert.match(deploy, /接続先を `rahiseko-alt\/food-hp` へ/);
+  // Git 接続の張り替え（Disconnect→Connect）は、次に別リポジトリへ引っ越すときも必ず要る
+  // 人の手作業。手順そのものを手順書から消さないこと（「確認する」に後退させない）。
+  assert.match(deploy, /Disconnect/);
+  assert.match(deploy, /Connect/);
+  assert.match(deploy, /Build output directory/);
+
+  // 切り替わったことを目視ではなく外部事実（配信中の ?v= の値）で確認する手順を残すこと。
+  assert.match(deploy, /site\.css\?v=/);
 });
