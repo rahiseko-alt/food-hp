@@ -31,7 +31,7 @@ jobs:
       behavior: ${{ steps.filter.outputs.behavior }}
       web: ${{ steps.filter.outputs.web }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -68,7 +68,7 @@ jobs:
     name: references / lint / unit / audit / roadmap
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -126,7 +126,7 @@ jobs:
         if: needs.changes.outputs.behavior != 'true'
         run: echo "JS・演出・e2e 関連の変更が無いため、ブラウザテストは実行しない（対象外）"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: needs.changes.outputs.behavior == 'true'
         with:
           persist-credentials: false
@@ -184,7 +184,7 @@ jobs:
         if: needs.changes.outputs.web != 'true'
         run: echo "apps/ packages/ presets/ に変更が無いため、Next.js の検査は実行しない（対象外）"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: needs.changes.outputs.web == 'true'
         with:
           persist-credentials: false
