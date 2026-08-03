@@ -10,6 +10,23 @@
   document.documentElement.dataset.openingState =
     (window.location.hash || window.matchMedia('(prefers-reduced-motion: reduce)').matches)
       ? 'ready' : 'loading';
+
+  /* オープニング演出の体感速度対策。lottie-loader.mjsが実際にfetch()するのは、
+     GSAP/lottie本体の読み込み・main.mjsとその依存モジュール一式の読み込み・実行が
+     終わった後（=かなり遅い段階）。だが hero.json/hero-sp.json は1MB超あり、この
+     一番重いダウンロードの開始が遅れることが「アニメーション開始までが遅い」の主因。
+     lottie-loader.mjsのisMobile()と同じ判定（config.mjsのbreakpoint値=767pxと一致させて
+     いる）で、実際に使われる方を先頭でpreloadし、他の読み込みと並行して先に取りに行く
+     （lottie-loader.mjs側のfetch()はブラウザキャッシュを再利用するだけになる） */
+  (function () {
+    var mobile = window.matchMedia('(max-width: 767px)').matches;
+    var link = document.createElement('link');
+    link.rel = 'preload';
+    link.as = 'fetch';
+    link.crossOrigin = 'anonymous';
+    link.href = mobile ? 'assets/lottie/hero-sp.json' : 'assets/lottie/hero.json';
+    document.head.appendChild(link);
+  })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Kose Food AI｜飲食20年×AIの顧問</title>
@@ -32,10 +49,12 @@
 <link href="https://fonts.googleapis.com/css2?family=Josefin+Sans:wght@400;700&amp;family=Zen+Kaku+Gothic+New:wght@500;700&amp;display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="assets/css/site.css?v=2026-08-01c" />
 
-<!-- GSAP 3.13.0 / CustomEase / lottie-web 5.12.2。CDNではなく同梱（オフラインでも動く） -->
-<script src="assets/vendor/gsap.min.js"></script>
-<script src="assets/vendor/CustomEase.min.js"></script>
-<script src="assets/vendor/lottie.min.js"></script>
+<!-- GSAP 3.13.0 / CustomEase / lottie-web 5.12.2。CDNではなく同梱（オフラインでも動く）。
+     deferにしてパース中の他リソース取得（Lottie本体のpreload等）をブロックしないようにする。
+     type="module"のmain.mjsもdefer相当なので、文書順どおりこれらの後に実行される（順序は変わらない） -->
+<script src="assets/vendor/gsap.min.js" defer></script>
+<script src="assets/vendor/CustomEase.min.js" defer></script>
+<script src="assets/vendor/lottie.min.js" defer></script>
 </head>
 <body id="top">
 
