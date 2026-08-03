@@ -82,8 +82,13 @@ test("deployment documentation separates the repository and Pages names", () => 
   assert.match(deploy, /Connect/);
   // ラベルの存在だけでなく、同じセルの値が正確に site であることを見る。単語境界(\b)だけでは
   // /site や site-old のような値も通してしまうため、Markdown のコードスパン `site` を直接固定する。
+  // `\s` は改行にもマッチするため、水平空白([ \t])と行アンカー(^...$/m)で対象行1行に閉じ込める
+  // （\s のままだとセルが空でも次の行の **`site`** に誤ってマッチした）。
   // `/`（リポジトリ直下）に書き換えられると AGENTS.md や docs/ まで公開されてしまう。
-  assert.match(deploy, /\|\s*Build output directory\s*\|\s*\*\*`site`\*\*(?=\s*(?:\||←))/);
+  assert.match(
+    deploy,
+    /^[ \t]*\|[ \t]*Build output directory[ \t]*\|[ \t]*\*\*`site`\*\*(?=[ \t]*(?:\||←))/m,
+  );
 
   // 切り替わったことを目視ではなく外部事実（配信中の ?v= の値）で確認する手順を残すこと。
   assert.match(deploy, /site\.css\?v=/);
